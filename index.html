@@ -1,0 +1,613 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>AIA CWT 團隊 AI 提詞神器</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; 
+            background-color: #f3f4f6;
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+            padding-bottom: 70px;
+        }
+        body::-webkit-scrollbar { display: none; }
+        
+        .view-section { display: none; animation: fadeIn 0.3s ease-in-out; }
+        .view-section.active { display: block; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+        .prompt-box {
+            background-color: #1e293b; color: #e2e8f0; font-family: 'Courier New', Courier, monospace;
+            white-space: pre-wrap; border-radius: 12px; padding: 16px; font-size: 14px; line-height: 1.6;
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.3);
+        }
+        .variable-highlight { color: #fbbf24; font-weight: bold; }
+        
+        .bottom-nav {
+            position: fixed; bottom: 0; left: 0; right: 0; background: white;
+            box-shadow: 0 -4px 15px rgba(0,0,0,0.05); display: flex; justify-content: space-around;
+            padding-bottom: env(safe-area-inset-bottom); z-index: 50;
+        }
+        .nav-item {
+            display: flex; flex-direction: column; align-items: center; padding: 10px 0;
+            color: #94a3b8; flex: 1; font-size: 11px; transition: color 0.2s;
+        }
+        .nav-item.active { color: #d31145; font-weight: bold; } /* AIA Red */
+        .nav-item i { font-size: 20px; margin-bottom: 4px; }
+
+        #toast {
+            position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
+            background: #10b981; color: white; padding: 12px 24px; border-radius: 30px;
+            font-size: 14px; font-weight: bold; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
+            opacity: 0; transition: opacity 0.3s; z-index: 100; pointer-events: none;
+        }
+        #toast.show { opacity: 1; }
+
+        /* AIA Specific Branding */
+        .bg-aia-red { background-color: #d31145; }
+        .text-aia-red { color: #d31145; }
+        .border-aia-red { border-color: #d31145; }
+    </style>
+</head>
+<body class="text-slate-800">
+
+    <!-- Header -->
+    <header class="bg-aia-red text-white p-4 sticky top-0 z-40 shadow-md flex items-center justify-between">
+        <div class="flex items-center" id="headerTitleArea">
+            <i class="fa-solid fa-crown text-yellow-300 mr-3 text-2xl"></i>
+            <div>
+                <h1 class="text-base font-bold leading-tight tracking-wide" id="ui-app-title">AIA CWT 團隊神器</h1>
+                <p class="text-[11px] text-red-100 opacity-90">CWT AI Agent</p>
+            </div>
+        </div>
+        <button id="backBtn" class="hidden text-white bg-red-700 hover:bg-red-800 rounded-full w-9 h-9 flex items-center justify-center transition-colors">
+            <i class="fa-solid fa-arrow-left"></i>
+        </button>
+        <div id="langSelectorArea" class="flex items-center bg-red-800 rounded-lg px-2 py-1 border border-red-700">
+            <i class="fa-solid fa-globe text-xs mr-1"></i>
+            <select id="langSelect" class="bg-transparent text-xs text-white font-bold focus:outline-none cursor-pointer appearance-none">
+                <option value="zh-HK" class="text-slate-800">繁體</option>
+                <option value="zh-CN" class="text-slate-800">简体</option>
+                <option value="en" class="text-slate-800">EN</option>
+            </select>
+        </div>
+    </header>
+
+    <!-- View 1: List -->
+    <div id="view-list" class="view-section active p-4 max-w-md mx-auto">
+        <div id="moduleListContainer" class="space-y-6 pb-4"></div>
+    </div>
+
+    <!-- View 2: Form -->
+    <div id="view-form" class="view-section p-4 max-w-md mx-auto">
+        <div class="bg-white rounded-2xl p-4 shadow-sm mb-5 border border-slate-100 flex items-center">
+            <div id="activeModuleIcon" class="w-12 h-12 rounded-xl flex items-center justify-center mr-4 text-2xl shrink-0"></div>
+            <div>
+                <h2 id="activeModuleTitle" class="font-bold text-slate-800 text-lg"></h2>
+                <p id="activeModuleDesc" class="text-xs text-slate-500 mt-0.5 line-clamp-2"></p>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden mb-6">
+            <div class="bg-red-50 px-4 py-3 border-b border-slate-100 flex items-center justify-between">
+                <span class="text-sm font-bold text-aia-red flex items-center">
+                    <span class="w-5 h-5 rounded-full bg-red-200 text-aia-red flex items-center justify-center text-xs mr-2">1</span>
+                    <span id="ui-step1-title">填寫情境變數</span>
+                </span>
+            </div>
+            <div id="formContainer" class="p-4 space-y-4"></div>
+        </div>
+
+        <div class="bg-slate-900 rounded-2xl shadow-md overflow-hidden mb-6">
+             <div class="bg-slate-800 px-4 py-3 border-b border-slate-700 flex items-center justify-between">
+                <span class="text-sm font-bold text-slate-200 flex items-center">
+                    <span class="w-5 h-5 rounded-full bg-slate-600 text-white flex items-center justify-center text-xs mr-2">2</span>
+                    <span id="ui-step2-title">預覽提詞</span>
+                </span>
+            </div>
+            <div class="relative">
+                <div id="promptPreview" class="prompt-box h-56 overflow-y-auto m-2 rounded-xl"></div>
+                <div class="p-3">
+                    <button id="copyBtn" class="w-full bg-aia-red hover:bg-red-600 text-white font-bold py-3.5 rounded-xl shadow-lg flex justify-center items-center active:scale-95 transition-transform text-sm">
+                        <i class="fa-regular fa-copy mr-2 text-lg"></i>
+                        <span id="ui-btn-copy">複製並前往 AI</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- View 3: Settings -->
+    <div id="view-settings" class="view-section p-4 max-w-md mx-auto">
+        <div class="bg-white rounded-2xl p-6 shadow-sm border border-slate-100 text-center mt-4">
+            <div class="w-20 h-20 bg-red-50 text-aia-red rounded-full flex items-center justify-center mx-auto mb-4 text-3xl">
+                <i class="fa-solid fa-users-viewfinder"></i>
+            </div>
+            <h2 class="text-xl font-bold mb-1">AIA CWT 團隊專屬</h2>
+            <p class="text-slate-500 text-sm mb-6">CWT 工作流系統</p>
+            
+            <div class="text-left bg-slate-50 p-5 rounded-xl border border-slate-100 text-sm text-slate-700 space-y-3">
+                <p class="font-bold text-slate-800 mb-2 border-b pb-2 flex items-center">
+                    <i class="fa-solid fa-lightbulb text-yellow-500 mr-2"></i>
+                    <span id="ui-tips-title">使用秘訣：</span>
+                </p>
+                <div id="ui-tips-content"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bottom Nav -->
+    <nav class="bottom-nav max-w-md mx-auto">
+        <div class="nav-item active" data-target="view-list" id="nav-home">
+            <i class="fa-solid fa-list-check"></i>
+            <span id="ui-nav-modules">15項模塊</span>
+        </div>
+        <div class="nav-item" data-target="view-settings" id="nav-settings">
+            <i class="fa-solid fa-circle-info"></i>
+            <span id="ui-nav-about">團隊說明</span>
+        </div>
+    </nav>
+
+    <div id="toast"><i class="fa-solid fa-check-circle mr-2"></i> <span id="ui-toast-msg">已複製！</span></div>
+
+    <script>
+        // === Multi-Language Database ===
+        const i18n = {
+            'zh-HK': {
+                ui: {
+                    appTitle: "AIA CWT 團隊神器",
+                    step1: "填寫客戶情境變數",
+                    step2: "預覽 AI 提詞",
+                    btnCopy: "複製並前往 AI (Copy)",
+                    navModules: "15項模塊",
+                    navAbout: "團隊說明",
+                    tipsTitle: "使用秘訣：",
+                    tipsContent: "<p>1. 選擇 CWT 團隊專用的工作模塊。</p><p>2. 在表單中輸入客戶具體情況，內置了 AIA 皇牌產品（如盈御3、愛伴航2）。</p><p>3. 點擊複製，於 ChatGPT / Claude / DeepSeek / Gemini 貼上即可。</p>",
+                    toast: "已複製！請切換至 AI 工具貼上"
+                },
+                db: [
+                    {
+                        category: "第一階段：獲客與引流 (Marketing)",
+                        color: "text-rose-600", bg: "bg-rose-100",
+                        items: [
+                            { id: "m1", title: "寫朋友圈", desc: "引發共鳴的生活貼文 (推介盈御/愛伴航)", icon: "fa-brands fa-weixin",
+                                template: "你現在是一位來自 AIA CWT 團隊 的高級財務策劃顧問。請幫我寫一篇朋友圈貼文。\n\n對象：{audience}\n痛點：{pain}\n帶出產品：【{product}】\n\n要求：\n1. 150字以內，適當使用 emoji。\n2. 語氣親切，痛點共鳴 -> 專業解析 -> 解決方案 -> 歡迎諮詢。\n3. 展現 CWT 團隊的專業與溫度，強調產品帶來的「安心感」。",
+                                fields: [ { id: "audience", label: "目標受眾", val: "35歲中產家庭父母" }, { id: "pain", label: "核心痛點", val: "擔心醫療通脹吃掉教育基金" }, { id: "product", label: "AIA 產品", val: "盈御多元貨幣計劃3" } ] },
+                            { id: "m2", title: "公眾號文章", desc: "展現權威的深度長文", icon: "fa-solid fa-newspaper",
+                                template: "請以「AIA CWT 團隊資深財富管理專家」身份，撰寫約 800 字專欄文章。\n\n主題：{topic}\n核心觀點：{corePoint}\n重點產品：【{product}】\n\n要求：\n1. 引人入勝的開場白。\n2. 虛構真實客戶案例。\n3. 對比無規劃的風險，帶出上述 AIA 產品的優勢。\n4. 結尾引導預約一對一諮詢。",
+                                fields: [ { id: "topic", label: "文章主題", val: "內地企業家如何利用香港保險隔離家業風險" }, { id: "corePoint", label: "核心觀點", val: "企業債務不應牽連家庭資產" }, { id: "product", label: "AIA 產品", val: "AIA 家族信託 + 大額人壽保障" } ] },
+                            { id: "m3", title: "短視頻文案", desc: "60秒短影音腳本，抓取公域流量", icon: "fa-brands fa-tiktok",
+                                template: "請幫我寫一個 60 秒短視頻口播腳本，以 AIA CWT 團隊理財顧問身份。\n\n主題：{topic}\n\n腳本框架：\n0-5秒：反常識金句抓住眼球\n5-15秒：放大痛點\n15-45秒：帶出【{product}】的2大實用優勢\n45-60秒：引導留言「{keyword}」領取資料",
+                                fields: [ { id: "topic", label: "影片主題", val: "為什麼買了醫療險還是要自費？" }, { id: "product", label: "AIA 產品", val: "AIA至尊醫療明珠 (免找數服務)" }, { id: "keyword", label: "引流關鍵字", val: "高端醫療清單" } ] },
+                            { id: "m8_news", title: "新聞解讀財富話題", desc: "藉熱點新聞創造聊天契機", icon: "fa-solid fa-fire-trend-up",
+                                template: "以下是今天新聞摘要：\n「{news}」\n\n請幫我轉化為發給客戶的 WhatsApp 訊息。\n客戶背景：{client}\n目的：藉話題引起對【{product}】的興趣。\n語氣：關心、不強求，展現 CWT 團隊貼心服務，控制在 4 句話內。",
+                                fields: [ { id: "news", label: "新聞", val: "公立醫院急症室輪候時間破紀錄" }, { id: "client", label: "客戶", val: "只有公司醫保的白領" }, { id: "product", label: "AIA 產品", val: "自願醫保尊耀計劃" } ] }
+                        ]
+                    },
+                    {
+                        category: "第二階段：專業裝備與演練 (Training)",
+                        color: "text-blue-600", bg: "bg-blue-100",
+                        items: [
+                            { id: "m6", title: "產品速查", desc: "快速提煉 AIA 產品核心賣點", icon: "fa-solid fa-magnifying-glass-chart",
+                                template: "請根據你對 AIA 友邦保險以下產品的了解，整理一份「產品速查卡」，供 CWT 團隊內部參考。\n\n產品：【{product}】\n\n請列出：\n1. 一句話總結賣點 (USP)\n2. 目標客群畫像\n3. 核心優勢 (列出 3 點，如回報率/多重保障)\n4. 潛在不保事項或限制 (列出 2 點)",
+                                fields: [ { id: "product", label: "AIA 產品名稱", val: "愛伴航保險計劃2系列" } ] },
+                            { id: "m4", title: "模擬教練演練", desc: "與 AI Role-play 應對刁鑽問題", icon: "fa-solid fa-people-arrows",
+                                template: "我們來進行 Role-play 演練。\n\n你扮演客戶：{clientRole}\n我扮演 AIA CWT 團隊的財務策劃顧問。\n主推產品：【{product}】\n\n規則：\n1. 我先說話破冰。\n2. 你展現抗拒，提出質疑。\n3. 對話 4 回合後，請以「教練」身份點評我。",
+                                fields: [ { id: "clientRole", label: "客戶設定", val: "覺得保費太貴的 40 歲企業高管" }, { id: "product", label: "AIA 產品", val: "盈御多元貨幣計劃3" } ] },
+                            { id: "m5", title: "古博士數字分身教練", desc: "向虛擬專家請教複雜個案", icon: "fa-solid fa-user-graduate",
+                                template: "你是頂級信託與財富傳承專家「古博士」。\n\n我是 CWT 團隊的顧問，遇到個案：\n{case}\n\n請問：\n1. 此個案最大潛在風險？\n2. 你會如何運用【{framework}】作架構設計？\n3. 給我 3 個能直擊客戶痛點的提問。",
+                                fields: [ { id: "case", label: "個案詳情", val: "60歲廠主，兩段婚姻，想資產平穩過渡又怕子女揮霍" }, { id: "framework", label: "AIA 架構", val: "友邦信託 + 大額壽險" } ] }
+                        ]
+                    },
+                    {
+                        category: "第三階段：見客實戰 (Meetings)",
+                        color: "text-amber-600", bg: "bg-amber-100",
+                        items: [
+                            { id: "m7", title: "見客前談話預案", desc: "設定破冰與 SPIN 提問策略", icon: "fa-regular fa-calendar-check",
+                                template: "我即將代表 CWT 團隊見一位客戶，請幫我制定面談預案。\n\n客戶資料：{client}\n面談目標：遞交並促成【{product}】\n\n請提供：\n1. 2 個破冰話題\n2. 3 個深挖需求的好問題 (SPIN法)\n3. 預判 2 個反對意見及應對話術",
+                                fields: [ { id: "client", label: "客戶現狀", val: "陳生，35歲IT人，剛生小孩" }, { id: "product", label: "AIA 產品", val: "愛伴航2 + 盈御3" } ] },
+                            { id: "m13", title: "客戶異議處理", desc: "高情商化解拒絕", icon: "fa-solid fa-shield-halved",
+                                template: "客戶拒絕我：「{objection}」\n\n請運用「Feel-Felt-Found (理解-認同-發現)」法則，幫我寫一段高情商的回應話術。\n目的不是逼買，而是展現 CWT 團隊的專業，引導他了解【{product}】的價值。\n語氣：專業、誠懇，符合香港文化。",
+                                fields: [ { id: "objection", label: "客戶的拒絕", val: "AIA 啲保費好像比其他公司貴。" }, { id: "product", label: "AIA 產品價值", val: "理賠穩定性、免找數網絡及長期分紅" } ] },
+                            { id: "m9", title: "見客後談話分析", desc: "提煉筆記，規劃跟進", icon: "fa-solid fa-clipboard-check",
+                                template: "這是我剛見客後記下的筆記：\n「{notes}」\n\n請幫我整理成 CRM 紀錄：\n- 核心關注點\n- 未解決疑慮\n- 下一步推薦 AIA 什麼方案及行動建議",
+                                fields: [ { id: "notes", label: "你的隨手筆記", val: "客戶對盈御3回報滿意，但擔心鎖定期。提到想買樓首期。" } ] }
+                        ]
+                    },
+                    {
+                        category: "第四階段：方案設計 (Proposal)",
+                        color: "text-emerald-600", bg: "bg-emerald-100",
+                        items: [
+                            { id: "m12", title: "產品比較分析", desc: "客觀對比，突顯 AIA 優勢", icon: "fa-solid fa-scale-balanced",
+                                template: "我要為客戶對比兩款產品：\n【AIA 產品】{productA}\n【競品】{productB}\n\n請以 CWT 團隊中立理財專家的口吻分析：\n1. 客觀指出各自特點。\n2. 突顯 AIA 產品在 {advantage} 方面的優勢。\n3. 基於客戶需求給出最終建議。",
+                                fields: [ { id: "productA", label: "AIA 產品", val: "愛伴航保險計劃2" }, { id: "productB", label: "競品特點", val: "市場某款危疾險" }, { id: "advantage", label: "AIA 優勢點", val: "多重賠償及腦退化保障" } ] },
+                            { id: "m10", title: "客戶方案文案", desc: "把冰冷數據翻譯成溫暖場景", icon: "fa-solid fa-file-pen",
+                                template: "這是一份 AIA 建議書的數據：\n【產品：{product}】\n【數據：{data}】\n\n請幫我寫一頁「執行摘要 (Executive Summary)」。\n1. 將數據翻譯成溫暖的「生活場景」(如教育基金、傳承)。\n2. 避免生硬術語。\n3. 列出三大核心價值。",
+                                fields: [ { id: "product", label: "AIA 產品", val: "盈御多元貨幣計劃3" }, { id: "data", label: "計畫書數據", val: "5年繳，年繳10萬。可無限次轉換受保人及轉換貨幣。" } ] },
+                            { id: "m11", title: "方案信息流長圖", desc: "提煉供設計圖片的精簡文案", icon: "fa-regular fa-image",
+                                template: "我要製作一張手機長圖總結客戶的【{product}】方案。\n\n請規劃長圖文案（極度精簡）：\n板塊1 (Why)：一句話點出必要性。\n板塊2 (How)：3個要點概括核心機制。\n板塊3 (When)：時間軸亮點。\n板塊4 (CTA)：一句呼籲，留 CWT 團隊顧問聯絡方式。",
+                                fields: [ { id: "product", label: "AIA 產品", val: "自願醫保尊耀計劃" } ] }
+                        ]
+                    },
+                    {
+                        category: "第五階段：售後檢視 (Review)",
+                        color: "text-purple-600", bg: "bg-purple-100",
+                        items: [
+                            { id: "m14", title: "年度保單檢視", desc: "準備開場白與 Up-sell 契機", icon: "fa-solid fa-magnifying-glass-chart",
+                                template: "客戶保單將滿一週年。他現有保單：{policies}\n\n請幫我設計：\n1. 專業溫馨的開場白（匯報 CWT 團隊服務及 AIA 紅利）。\n2. 自然過渡話題：從舊保單切換到探討【{newProduct}】以應對 {newNeed}。",
+                                fields: [ { id: "policies", label: "現有保單", val: "一份舊款細保額危疾" }, { id: "newProduct", label: "推介 AIA 產品", val: "愛伴航2" }, { id: "newNeed", label: "新需求", val: "通脹對保額的侵蝕" } ] },
+                            { id: "m15", title: "家庭保單檢視", desc: "發掘全家保障或信託需求", icon: "fa-solid fa-house-chimney-medical",
+                                template: "客戶是 {client}，一直只幫自己買保險。我想代表 CWT 團隊推動「全家風險排查」。\n\n請提供一份「家庭財富體檢問卷」(4個問題)：\n引導他思考：\n1. 配偶的醫療保障 (引入 {product1})\n2. 子女教育基金 (引入 {product2})\n問題要委婉、專業。",
+                                fields: [ { id: "client", label: "客戶背景", val: "45歲企業高管" }, { id: "product1", label: "AIA 醫療方案", val: "AIA 高端醫療" }, { id: "product2", label: "AIA 儲蓄方案", val: "盈御多元貨幣計劃3" } ] }
+                        ]
+                    }
+                ]
+            },
+            // === Simplified Chinese ===
+            'zh-CN': {
+                ui: {
+                    appTitle: "AIA CWT 团队神器", step1: "填写客户情境变量", step2: "预览 AI 提词",
+                    btnCopy: "复制并前往 AI (Copy)", navModules: "15项模块", navAbout: "团队说明",
+                    tipsTitle: "使用秘诀：",
+                    tipsContent: "<p>1. 选择 CWT 团队专用的工作模块。</p><p>2. 在表单中输入客户具体情况，内置了 AIA 王牌产品（如盈御3、爱伴航2）。</p><p>3. 点击复制，于 ChatGPT / Claude / DeepSeek / Gemini 粘贴即可。</p>",
+                    toast: "已复制！请切换至 AI 工具粘贴"
+                },
+                db: [
+                    {
+                        category: "第一阶段：获客与引流 (Marketing)", color: "text-rose-600", bg: "bg-rose-100",
+                        items: [
+                            { id: "m1", title: "写朋友圈", desc: "引发共鸣的生活贴文", icon: "fa-brands fa-weixin",
+                                template: "你现在是一位来自 AIA CWT 团队 的高级财务策划顾问。请帮我写一篇朋友圈贴文。\n\n对象：{audience}\n痛点：{pain}\n带出产品：【{product}】\n\n要求：\n1. 150字以内，适当使用 emoji。\n2. 语气亲切，痛点共鸣 -> 专业解析 -> 解决方案 -> 欢迎咨询。\n3. 展现 CWT 团队的专业与温度，强调产品带来的「安心感」。",
+                                fields: [ { id: "audience", label: "目标受众", val: "35岁中产家庭父母" }, { id: "pain", label: "核心痛点", val: "担心医疗通胀吃掉教育基金" }, { id: "product", label: "AIA 产品", val: "盈御多元货币计划3" } ] },
+                            { id: "m2", title: "公众号文章", desc: "展现权威的深度长文", icon: "fa-solid fa-newspaper",
+                                template: "请以「AIA CWT 团队资深财富管理专家」身份，撰写约 800 字专栏文章。\n\n主题：{topic}\n核心观点：{corePoint}\n重点产品：【{product}】\n\n要求包含：\n1. 引人入胜的开场白。\n2. 虚构真实客户案例。\n3. 对比无规划的风险，带出上述 AIA 产品的优势。\n4. 结尾引导预约一对一咨询。",
+                                fields: [ { id: "topic", label: "文章主题", val: "内地企业家如何利用香港保险隔离家业风险" }, { id: "corePoint", label: "核心观点", val: "企业债务不应牵连家庭资产" }, { id: "product", label: "AIA 产品", val: "AIA 家族信托 + 大额人寿保障" } ] },
+                            { id: "m3", title: "短视频文案", desc: "60秒短影音脚本", icon: "fa-brands fa-tiktok",
+                                template: "请帮我写一个 60 秒短视频口播脚本，以 AIA CWT 团队理财顾问身份。\n\n主题：{topic}\n\n脚本框架：\n0-5秒：反常识金句抓住眼球\n5-15秒：放大痛点\n15-45秒：带出【{product}】的2大实用优势\n45-60秒：引导留言「{keyword}」领取资料",
+                                fields: [ { id: "topic", label: "影片主题", val: "为什么买了医疗险还是要自费？" }, { id: "product", label: "AIA 产品", val: "AIA至尊医疗明珠 (免找数服务)" }, { id: "keyword", label: "引流关键字", val: "高端医疗清单" } ] },
+                            { id: "m8_news", title: "新闻解读财富话题", desc: "借热点新闻创造聊天契机", icon: "fa-solid fa-fire-trend-up",
+                                template: "以下是今天新闻摘要：\n「{news}」\n\n请帮我转化为发给客户的 WeChat 消息。\n客户背景：{client}\n目的：借话题引起对【{product}】的兴趣。\n语气要求：关心、不强求，展现 CWT 团队贴心服务，控制在 4 句话内。",
+                                fields: [ { id: "news", label: "新闻", val: "公立医院急诊室轮候时间破纪录" }, { id: "client", label: "客户", val: "只有公司医保的白领" }, { id: "product", label: "AIA 产品", val: "自愿医保尊耀计划" } ] }
+                        ]
+                    },
+                    {
+                        category: "第二阶段：专业装备与演练 (Training)", color: "text-blue-600", bg: "bg-blue-100",
+                        items: [
+                            { id: "m6", title: "产品速查", desc: "快速提炼 AIA 产品核心卖点", icon: "fa-solid fa-magnifying-glass-chart",
+                                template: "请根据你对 AIA 友邦保险以下产品的了解，整理一份「产品速查卡」，供 CWT 团队内部参考。\n\n产品：【{product}】\n\n请列出：\n1. 一句话总结卖点 (USP)\n2. 目标客群画像\n3. 核心优势 (列出 3 点)\n4. 潜在不保事项或限制 (列出 2 点)",
+                                fields: [ { id: "product", label: "AIA 产品名称", val: "爱伴航保险计划2系列" } ] },
+                            { id: "m4", title: "模拟教练演练", desc: "与 AI Role-play", icon: "fa-solid fa-people-arrows",
+                                template: "我们来进行 Role-play 演练。\n\n你扮演客户：{clientRole}\n我扮演 AIA CWT 团队的财务策划顾问。\n主推产品：【{product}】\n\n规则：\n1. 我先说话破冰。\n2. 你展现抗拒，提出质疑。\n3. 对话 4 回合后，请以「教练」身份点评我。",
+                                fields: [ { id: "clientRole", label: "客户设定", val: "觉得保费太贵的 40 岁企业高管" }, { id: "product", label: "AIA 产品", val: "盈御多元货币计划3" } ] },
+                            { id: "m5", title: "古博士数字分身教练", desc: "向虚拟专家请教复杂个案", icon: "fa-solid fa-user-graduate",
+                                template: "你是顶级信托与财富传承专家「古博士」。\n\n我是 CWT 团队顾问，遇到个案：\n{case}\n\n请问：\n1. 此个案最大潜在风险？\n2. 你会如何运用【{framework}】作架构设计？\n3. 给我 3 个能直击客户痛点的提问。",
+                                fields: [ { id: "case", label: "个案详情", val: "60岁厂主，两段婚姻，想资产平稳过渡又怕子女挥霍" }, { id: "framework", label: "AIA 架构", val: "友邦信托 + 大额寿险" } ] }
+                        ]
+                    },
+                    {
+                        category: "第三阶段：见客实战 (Meetings)", color: "text-amber-600", bg: "bg-amber-100",
+                        items: [
+                            { id: "m7", title: "见客前谈话预案", desc: "设定破冰与提问策略", icon: "fa-regular fa-calendar-check",
+                                template: "我即将代表 CWT 团队见一位客户，请帮我制定面谈预案。\n\n客户资料：{client}\n面谈目标：递交并促成【{product}】\n\n请提供：\n1. 2 个破冰话题\n2. 3 个深挖需求的好问题 (SPIN法)\n3. 预判 2 个反对意见及应对术语",
+                                fields: [ { id: "client", label: "客户现状", val: "陈生，35岁IT人，刚生小孩" }, { id: "product", label: "AIA 产品", val: "爱伴航2 + 盈御3" } ] },
+                            { id: "m13", title: "客户异议处理", desc: "高情商化解拒绝", icon: "fa-solid fa-shield-halved",
+                                template: "客户拒绝我：「{objection}」\n\n请运用「Feel-Felt-Found」法则，帮我写一段高情商的回应话术。\n目的不是逼买，而是展现 CWT 团队的专业，引导他了解【{product}】的价值。\n语气：专业、诚恳。",
+                                fields: [ { id: "objection", label: "客户的拒绝", val: "AIA 的保费好像比其他公司贵。" }, { id: "product", label: "AIA 产品价值", val: "理赔稳定性、免找数网络及长期分红" } ] },
+                            { id: "m9", title: "见客后谈话分析", desc: "提炼笔记，规划跟进", icon: "fa-solid fa-clipboard-check",
+                                template: "这是我刚见客后记下的笔记：\n「{notes}」\n\n请帮我整理成 CRM 纪录：\n- 核心关注点\n- 未解决疑虑\n- 下一步推荐 AIA 什么方案及行动建议",
+                                fields: [ { id: "notes", label: "你的随手笔记", val: "客户对盈御3回报满意，但担心锁定期。提到想买楼首期。" } ] }
+                        ]
+                    },
+                    {
+                        category: "第四阶段：方案设计 (Proposal)", color: "text-emerald-600", bg: "bg-emerald-100",
+                        items: [
+                            { id: "m12", title: "产品比较分析", desc: "客观对比，突显 AIA 优势", icon: "fa-solid fa-scale-balanced",
+                                template: "我要为客户对比两款产品：\n【AIA 产品】{productA}\n【竞品】{productB}\n\n请以 CWT 团队中立理财专家的口吻分析：\n1. 客观指出各自特点。\n2. 突显 AIA 产品在 {advantage} 方面的优势。\n3. 基于客户需求给出最终建议。",
+                                fields: [ { id: "productA", label: "AIA 产品", val: "爱伴航保险计划2" }, { id: "productB", label: "竞品特点", val: "市场某款危疾险" }, { id: "advantage", label: "AIA 优势点", val: "多重赔偿及脑退化保障" } ] },
+                            { id: "m10", title: "客户方案文案", desc: "把冰冷数据翻译成温暖场景", icon: "fa-solid fa-file-pen",
+                                template: "这是一份 AIA 建议书的数据：\n【产品：{product}】\n【数据：{data}】\n\n请帮我写一页「执行摘要 (Executive Summary)」。\n1. 将数据翻译成温暖的「生活场景」。\n2. 避免生硬术语。\n3. 列出三大核心价值。",
+                                fields: [ { id: "product", label: "AIA 产品", val: "盈御多元货币计划3" }, { id: "data", label: "计划书数据", val: "5年缴，年缴10万。可无限次转换受保人及转换货币。" } ] },
+                            { id: "m11", title: "方案信息流长图", desc: "提炼供设计图片的精简文案", icon: "fa-regular fa-image",
+                                template: "我要制作一张手机长图总结客户的【{product}】方案。\n\n请规划长图文案（极度精简）：\n板块1 (Why)：一句话点出必要性。\n板块2 (How)：3个要点概括核心机制。\n板块3 (When)：时间轴亮点。\n板块4 (CTA)：一句呼吁，留 CWT 团队顾问联络方式。",
+                                fields: [ { id: "product", label: "AIA 产品", val: "自愿医保尊耀计划" } ] }
+                        ]
+                    },
+                    {
+                        category: "第五阶段：售后检视 (Review)", color: "text-purple-600", bg: "bg-purple-100",
+                        items: [
+                            { id: "m14", title: "年度保单检视", desc: "准备开场白与 Up-sell 契机", icon: "fa-solid fa-magnifying-glass-chart",
+                                template: "客户保单将满一周年。他现有保单：{policies}\n\n请帮我设计：\n1. 专业温馨的开场白（汇报 CWT 团队服务及 AIA 红利）。\n2. 自然过渡话题：从旧保单切换到探讨【{newProduct}】以应对 {newNeed}。",
+                                fields: [ { id: "policies", label: "现有保单", val: "一份旧款细保额危疾" }, { id: "newProduct", label: "推介 AIA 产品", val: "爱伴航2" }, { id: "newNeed", label: "新需求", val: "通胀对保额的侵蚀" } ] },
+                            { id: "m15", title: "家庭保单检视", desc: "发掘全家保障或信托需求", icon: "fa-solid fa-house-chimney-medical",
+                                template: "客户是 {client}，一直只帮自己买保险。我想代表 CWT 团队推动「全家风险排查」。\n\n请提供一份「家庭财富体检问卷」(4个问题)：\n引导他思考：\n1. 配偶的医疗保障 (引入 {product1})\n2. 子女教育基金 (引入 {product2})\n问题要委婉、专业。",
+                                fields: [ { id: "client", label: "客户背景", val: "45岁企业高管" }, { id: "product1", label: "AIA 医疗方案", val: "AIA 高端医疗" }, { id: "product2", label: "AIA 储蓄方案", val: "盈御多元货币计划3" } ] }
+                        ]
+                    }
+                ]
+            },
+            // === English ===
+            'en': {
+                ui: {
+                    appTitle: "AIA CWT Team Prompts", step1: "Input Client Variables", step2: "Preview AI Prompt",
+                    btnCopy: "Copy Prompt for AI", navModules: "15 Modules", navAbout: "Team Info",
+                    tipsTitle: "Pro Tips:",
+                    tipsContent: "<p>1. Select a CWT Team workflow module.</p><p>2. Fill in the client's specifics. AIA flagship products (e.g. Global Power 3) are built-in.</p><p>3. Copy and paste into ChatGPT, Claude, DeepSeek, or Gemini.</p>",
+                    toast: "Copied! Please paste into your AI tool."
+                },
+                db: [
+                    {
+                        category: "Phase 1: Marketing & Lead Gen", color: "text-rose-600", bg: "bg-rose-100",
+                        items: [
+                            { id: "m1", title: "Social Media Post", desc: "Engaging post for Facebook/IG", icon: "fa-brands fa-weixin",
+                                template: "Act as a Senior Financial Planner from the AIA CWT Team. Write a social media post.\n\nAudience: {audience}\nPain Point: {pain}\nHighlight Product: 【{product}】\n\nRequirements:\n1. Under 150 words, use emojis.\n2. Friendly tone: Empathy -> Professional Analysis -> Solution -> Welcome to DM.\n3. Show the CWT Team's professionalism and care.",
+                                fields: [ { id: "audience", label: "Target Audience", val: "35yo middle-class parents" }, { id: "pain", label: "Pain Point", val: "Medical inflation eating up education funds" }, { id: "product", label: "AIA Product", val: "Global Power Multi-Currency Plan 3" } ] },
+                            { id: "m2", title: "In-depth Article", desc: "Professional article for LinkedIn/Blog", icon: "fa-solid fa-newspaper",
+                                template: "Act as an AIA CWT Team Wealth Management Expert. Write an 800-word article.\n\nTopic: {topic}\nCore Idea: {corePoint}\nKey Product: 【{product}】\n\nInclude:\n1. Catchy hook.\n2. Fictional but realistic client case.\n3. Compare having no plan vs. the benefits of the AIA product.\n4. Call-to-action for a 1-on-1 consultation.",
+                                fields: [ { id: "topic", label: "Topic", val: "How entrepreneurs isolate family wealth risks" }, { id: "corePoint", label: "Core Idea", val: "Business debts shouldn't affect family assets" }, { id: "product", label: "AIA Product", val: "AIA Trust + High Life Cover" } ] },
+                            { id: "m3", title: "Short Video Script", desc: "60s script for Reels/TikTok", icon: "fa-brands fa-tiktok",
+                                template: "Write a 60-second video script as an AIA CWT Team Financial Planner.\n\nTopic: {topic}\n\nStructure:\n0-5s: Hook with a counter-intuitive fact\n5-15s: Amplify the pain point\n15-45s: Introduce 2 practical benefits of 【{product}】\n45-60s: CTA to comment \"{keyword}\" for info",
+                                fields: [ { id: "topic", label: "Topic", val: "Why do you still pay out-of-pocket with medical insurance?" }, { id: "product", label: "AIA Product", val: "CEO Medical Plan" }, { id: "keyword", label: "Keyword", val: "Medical List" } ] },
+                            { id: "m8_news", title: "News-driven Conversation", desc: "Ice-breaker using current news", icon: "fa-solid fa-fire-trend-up",
+                                template: "Here is today's news summary:\n\"{news}\"\n\nDraft a WhatsApp message to a client.\nClient: {client}\nGoal: Spark interest in 【{product}】.\nTone: Caring, not pushy, showing CWT Team's attentive service. Max 4 sentences.",
+                                fields: [ { id: "news", label: "News", val: "Public hospital waiting times hit record high" }, { id: "client", label: "Client", val: "White-collar with only basic group medical" }, { id: "product", label: "AIA Product", val: "VHIS VIP Plan" } ] }
+                        ]
+                    },
+                    {
+                        category: "Phase 2: Preparation & Training", color: "text-blue-600", bg: "bg-blue-100",
+                        items: [
+                            { id: "m6", title: "Product Quick Check", desc: "Extract key selling points", icon: "fa-solid fa-magnifying-glass-chart",
+                                template: "Based on your knowledge of AIA products, create a 'Product Quick Card' for CWT Team internal reference.\n\nProduct: 【{product}】\n\nInclude:\n1. 1-sentence USP\n2. Target customer profile\n3. 3 Core advantages\n4. 2 Exclusions or limitations",
+                                fields: [ { id: "product", label: "AIA Product", val: "Protect Elite Ultra 2 Series" } ] },
+                            { id: "m4", title: "Simulation Coaching", desc: "Role-play with AI", icon: "fa-solid fa-people-arrows",
+                                template: "Let's do a sales Role-play.\n\nYou are the client: {clientRole}\nI am the AIA CWT Team Financial Planner.\nPitching: 【{product}】\n\nRules:\n1. I speak first to break the ice.\n2. You show resistance and ask tough questions.\n3. After 4 turns, act as a coach and review my performance.",
+                                fields: [ { id: "clientRole", label: "Client Profile", val: "40yo executive who thinks premiums are too high" }, { id: "product", label: "AIA Product", val: "Global Power Multi-Currency Plan 3" } ] },
+                            { id: "m5", title: "Expert Digital Twin", desc: "Ask complex case solutions", icon: "fa-solid fa-user-graduate",
+                                template: "Act as 'Dr. Ku', a top-tier Trust & Legacy Planning expert.\n\nI am a CWT Team planner with this case:\n{case}\n\nQuestions:\n1. What's the biggest hidden risk?\n2. How would you structure 【{framework}】?\n3. Give me 3 hard-hitting questions to ask the client.",
+                                fields: [ { id: "case", label: "Case Details", val: "60yo factory owner, 2 marriages, wants smooth asset transition" }, { id: "framework", label: "AIA Framework", val: "AIA Trust + Jumbo Life Insurance" } ] }
+                        ]
+                    },
+                    {
+                        category: "Phase 3: Client Meetings", color: "text-amber-600", bg: "bg-amber-100",
+                        items: [
+                            { id: "m7", title: "Pre-meeting Plan", desc: "SPIN questions and ice-breakers", icon: "fa-regular fa-calendar-check",
+                                template: "I am meeting a client soon representing the CWT Team. Create a meeting plan.\n\nClient: {client}\nGoal: Pitch 【{product}】\n\nProvide:\n1. 2 natural ice-breakers\n2. 3 SPIN questions to dig deeper\n3. 2 anticipated objections & rebuttals",
+                                fields: [ { id: "client", label: "Client Status", val: "Mr. Chan, 35yo IT, newborn baby" }, { id: "product", label: "AIA Product", val: "Protect Elite 2 + Global Power 3" } ] },
+                            { id: "m13", title: "Objection Handling", desc: "Handle rejections with high EQ", icon: "fa-solid fa-shield-halved",
+                                template: "A client just rejected me: \"{objection}\"\n\nUse the 'Feel-Felt-Found' framework to draft a high-EQ response.\nGoal: Show CWT Team's professionalism and help them understand the value of 【{product}】.\nTone: Professional and sincere.",
+                                fields: [ { id: "objection", label: "Objection", val: "AIA premiums seem more expensive." }, { id: "product", label: "AIA Value", val: "Stable claims, Cashless network, long-term dividends" } ] },
+                            { id: "m9", title: "Post-meeting Analysis", desc: "Turn notes into CRM actions", icon: "fa-solid fa-clipboard-check",
+                                template: "Here are my quick post-meeting notes:\n\"{notes}\"\n\nOrganize this into a CRM record:\n- Core interests\n- Unresolved doubts\n- Next steps and which AIA product to recommend next",
+                                fields: [ { id: "notes", label: "Your Notes", val: "Liked Global Power 3 returns but worried about lock-in period. Wants to buy property." } ] }
+                        ]
+                    },
+                    {
+                        category: "Phase 4: Proposal Design", color: "text-emerald-600", bg: "bg-emerald-100",
+                        items: [
+                            { id: "m12", title: "Product Comparison", desc: "Objective comparison highlighting AIA", icon: "fa-solid fa-scale-balanced",
+                                template: "Compare two products for my client:\n【AIA Product】{productA}\n【Competitor】{productB}\n\nAct as a neutral expert from the CWT Team:\n1. Objectively state features.\n2. Highlight AIA's advantage in {advantage}.\n3. Give a final recommendation based on client needs.",
+                                fields: [ { id: "productA", label: "AIA Product", val: "Protect Elite Ultra 2" }, { id: "productB", label: "Competitor", val: "A generic market CI plan" }, { id: "advantage", label: "AIA Advantage", val: "Multi-claims and Dementia cover" } ] },
+                            { id: "m10", title: "Proposal Copywriting", desc: "Translate data into warm words", icon: "fa-solid fa-file-pen",
+                                template: "Here is the data for an AIA proposal:\n【Product: {product}】\n【Data: {data}】\n\nWrite a 1-page 'Executive Summary'.\n1. Translate cold data into warm 'life scenarios' (e.g. legacy, education).\n2. Avoid jargon.\n3. Use bullet points for the 3 core values.",
+                                fields: [ { id: "product", label: "AIA Product", val: "Global Power Multi-Currency Plan 3" }, { id: "data", label: "Proposal Data", val: "5-yr pay, 100k/yr. Unlimited changes of insured & currency." } ] },
+                            { id: "m11", title: "Infographic Script", desc: "Short copy for visual design", icon: "fa-regular fa-image",
+                                template: "I need to make a mobile infographic for the 【{product}】 plan.\n\nProvide extremely concise copy:\nSection 1 (Why): 1 sentence on the necessity.\nSection 2 (How): 3 bullet points on core mechanics.\nSection 3 (When): Timeline highlight.\nSection 4 (CTA): A call to action with CWT Team contact info.",
+                                fields: [ { id: "product", label: "AIA Product", val: "VHIS VIP Plan" } ] }
+                        ]
+                    },
+                    {
+                        category: "Phase 5: Review & After-Sales", color: "text-purple-600", bg: "bg-purple-100",
+                        items: [
+                            { id: "m14", title: "Annual Policy Review", desc: "Review and Up-sell", icon: "fa-solid fa-magnifying-glass-chart",
+                                template: "Client's policy is at its anniversary. Current policy: {policies}\n\nDraft:\n1. A warm opening (report CWT Team services & AIA dividends).\n2. A natural transition to discuss 【{newProduct}】 to address {newNeed}.",
+                                fields: [ { id: "policies", label: "Current Policy", val: "An old small-sum CI plan" }, { id: "newProduct", label: "Recommend AIA", val: "Protect Elite 2" }, { id: "newNeed", label: "New Need", val: "Inflation eroding coverage" } ] },
+                            { id: "m15", title: "Family Policy Review", desc: "Expand to spouse/kids or trust", icon: "fa-solid fa-house-chimney-medical",
+                                template: "Client is a {client} with only personal coverage. I want to do a 'Family Risk Check' for the CWT Team.\n\nProvide a 'Family Wealth Questionnaire' (4 questions):\nGuide them to think about:\n1. Spouse's medical cover (Introduce {product1})\n2. Kids' education fund (Introduce {product2})\nKeep it professional and tactful.",
+                                fields: [ { id: "client", label: "Client Profile", val: "45yo executive" }, { id: "product1", label: "AIA Medical", val: "AIA High-end Medical" }, { id: "product2", label: "AIA Savings", val: "Global Power Multi-Currency 3" } ] }
+                        ]
+                    }
+                ]
+            }
+        };
+
+        // === State ===
+        let currentLang = 'zh-HK';
+        let currentModule = null;
+
+        // === DOM Elements ===
+        const els = {
+            langSelect: document.getElementById('langSelect'),
+            moduleListContainer: document.getElementById('moduleListContainer'),
+            formContainer: document.getElementById('formContainer'),
+            promptPreview: document.getElementById('promptPreview'),
+            backBtn: document.getElementById('backBtn'),
+            views: document.querySelectorAll('.view-section'),
+            navItems: document.querySelectorAll('.nav-item'),
+            copyBtn: document.getElementById('copyBtn'),
+            toast: document.getElementById('toast'),
+            // UI Text Elements
+            uiAppTitle: document.getElementById('ui-app-title'),
+            uiStep1: document.getElementById('ui-step1-title'),
+            uiStep2: document.getElementById('ui-step2-title'),
+            uiBtnCopy: document.getElementById('ui-btn-copy'),
+            uiNavModules: document.getElementById('ui-nav-modules'),
+            uiNavAbout: document.getElementById('ui-nav-about'),
+            uiTipsTitle: document.getElementById('ui-tips-title'),
+            uiTipsContent: document.getElementById('ui-tips-content'),
+            uiToastMsg: document.getElementById('ui-toast-msg'),
+            // Active Module Elements
+            activeModuleTitle: document.getElementById('activeModuleTitle'),
+            activeModuleDesc: document.getElementById('activeModuleDesc'),
+            activeModuleIcon: document.getElementById('activeModuleIcon')
+        };
+
+        // === Core Functions ===
+
+        // 1. Change Language and Update UI completely
+        function setLanguage(lang) {
+            currentLang = lang;
+            const data = i18n[lang];
+            
+            // Update static UI text
+            els.uiAppTitle.innerText = data.ui.appTitle;
+            els.uiStep1.innerText = data.ui.step1;
+            els.uiStep2.innerText = data.ui.step2;
+            els.uiBtnCopy.innerText = data.ui.btnCopy;
+            els.uiNavModules.innerText = data.ui.navModules;
+            els.uiNavAbout.innerText = data.ui.navAbout;
+            els.uiTipsTitle.innerText = data.ui.tipsTitle;
+            els.uiTipsContent.innerHTML = data.ui.tipsContent;
+            els.uiToastMsg.innerText = data.ui.toast;
+
+            // Re-render Module List
+            renderList();
+
+            // If a module is currently open, refresh its content in the new language
+            if (currentModule) {
+                openModule(currentModule.id); 
+            }
+        }
+
+        // 2. Render the Home List
+        function renderList() {
+            const db = i18n[currentLang].db;
+            let html = '';
+            db.forEach(cat => {
+                html += `<div class="mb-5">
+                            <h3 class="text-xs font-bold text-slate-500 mb-2.5 px-2 tracking-wide">${cat.category}</h3>
+                            <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">`;
+                cat.items.forEach((item, index) => {
+                    const borderClass = index === cat.items.length - 1 ? '' : 'border-b border-slate-100';
+                    html += `
+                        <div onclick="openModule('${item.id}')" class="p-4 flex items-center active:bg-red-50 transition-colors ${borderClass}">
+                            <div class="w-11 h-11 rounded-xl ${cat.bg} ${cat.color} flex items-center justify-center mr-4 shrink-0 shadow-inner">
+                                <i class="${item.icon} text-xl"></i>
+                            </div>
+                            <div class="flex-1">
+                                <h4 class="font-bold text-slate-800 text-[15px]">${item.title}</h4>
+                                <p class="text-[11px] text-slate-500 mt-0.5 line-clamp-1">${item.desc}</p>
+                            </div>
+                            <i class="fa-solid fa-chevron-right text-slate-300 text-sm ml-2"></i>
+                        </div>`;
+                });
+                html += `</div></div>`;
+            });
+            els.moduleListContainer.innerHTML = html;
+        }
+
+        // 3. Open a specific Module
+        window.openModule = (id) => {
+            const db = i18n[currentLang].db;
+            // Find module data in current language
+            for(let cat of db) {
+                const found = cat.items.find(i => i.id === id);
+                if(found) { 
+                    currentModule = found; 
+                    currentModule.catColor = cat.color;
+                    currentModule.catBg = cat.bg;
+                    break; 
+                }
+            }
+            if(!currentModule) return;
+
+            // Set Headers
+            els.activeModuleTitle.innerText = currentModule.title;
+            els.activeModuleDesc.innerText = currentModule.desc;
+            els.activeModuleIcon.className = `w-12 h-12 rounded-xl flex items-center justify-center mr-4 text-2xl shrink-0 ${currentModule.catBg} ${currentModule.catColor}`;
+            els.activeModuleIcon.innerHTML = `<i class="${currentModule.icon}"></i>`;
+
+            // Build Form
+            let formHtml = '';
+            currentModule.fields.forEach(f => {
+                formHtml += `
+                    <div>
+                        <label class="block text-xs font-bold text-slate-600 mb-1.5 ml-1">${f.label}</label>
+                        <textarea id="input_${f.id}" rows="2" oninput="updatePreview()"
+                            class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-[14px] focus:outline-none focus:border-red-500 focus:ring-1 focus:ring-red-500 focus:bg-white transition-all resize-none">${f.val}</textarea>
+                    </div>`;
+            });
+            els.formContainer.innerHTML = formHtml;
+
+            switchView('view-form');
+            els.backBtn.classList.remove('hidden');
+            els.navItems.forEach(nav => nav.classList.remove('active'));
+
+            updatePreview(); // Initial preview generation
+        };
+
+        // 4. Update Preview text in real-time
+        window.updatePreview = () => {
+            if(!currentModule) return;
+            let finalPrompt = currentModule.template;
+            
+            currentModule.fields.forEach(f => {
+                const inputEl = document.getElementById(`input_${f.id}`);
+                const val = inputEl ? inputEl.value : '';
+                const regex = new RegExp(`{${f.id}}`, 'g');
+                finalPrompt = finalPrompt.replace(regex, `<span class="variable-highlight">${val || '___'}</span>`);
+            });
+            
+            els.promptPreview.innerHTML = finalPrompt;
+        };
+
+        // 5. Switch Views (List / Form / Settings)
+        function switchView(viewId) {
+            els.views.forEach(v => v.classList.remove('active'));
+            document.getElementById(viewId).classList.add('active');
+            window.scrollTo(0, 0);
+        }
+
+        // === Event Listeners ===
+        els.langSelect.addEventListener('change', (e) => {
+            setLanguage(e.target.value);
+        });
+
+        els.backBtn.addEventListener('click', () => {
+            switchView('view-list');
+            els.backBtn.classList.add('hidden');
+            document.getElementById('nav-home').classList.add('active');
+        });
+
+        els.navItems.forEach(item => {
+            item.addEventListener('click', function() {
+                const target = this.getAttribute('data-target');
+                els.navItems.forEach(n => n.classList.remove('active'));
+                this.classList.add('active');
+                switchView(target);
+                els.backBtn.classList.add('hidden');
+            });
+        });
+
+        els.copyBtn.addEventListener('click', function() {
+            const textToCopy = els.promptPreview.innerText || els.promptPreview.textContent;
+            navigator.clipboard.writeText(textToCopy).then(() => {
+                els.toast.classList.add('show');
+                const btn = this;
+                const originalHtml = btn.innerHTML;
+                
+                // Visual feedback using current language string
+                const successMsg = currentLang === 'en' ? "Copied!" : "複製成功！";
+                btn.innerHTML = `<i class="fa-solid fa-check text-lg mr-2"></i> ${successMsg}`;
+                btn.classList.replace('bg-aia-red', 'bg-emerald-500');
+                btn.classList.replace('hover:bg-red-600', 'hover:bg-emerald-400');
+                
+                setTimeout(() => {
+                    els.toast.classList.remove('show');
+                    btn.innerHTML = originalHtml;
+                    btn.classList.replace('bg-emerald-500', 'bg-aia-red');
+                    btn.classList.replace('hover:bg-emerald-400', 'hover:bg-red-600');
+                }, 2000);
+            }).catch(err => {
+                alert(currentLang === 'en' ? 'Copy failed, please select text manually.' : '複製失敗，請長按文字手動複製。');
+            });
+        });
+
+        // === Initialize App ===
+        setLanguage('zh-HK');
+
+    </script>
+</body>
+</html>
